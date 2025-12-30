@@ -5,33 +5,25 @@ const Restaurant = require('../models/Restaurant');
 
 router.post('/load-restaurants', async (req, res) => {
     try {
-        const { city, street } = req.body;
-        const apiKey = process.env.VITE_GOOGLE_API_KEY;
+        const { city } = req.body;
+        // וודא שהשם הזה תואם בדיוק למה שהגדרת ב-Render Settings
+        const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
-        if (!city) {
-            return res.status(400).json({ error: "City is required" });
-        }
+        if (!city) return res.status(400).json({ error: "City is required" });
 
-        // בניית השאילתה: אם יש רחוב, הוא מתווסף
-        let searchQuery = `kosher restaurants in ${city}`;
-        if (street && street.trim() !== "") {
-            searchQuery = `kosher restaurants in ${street}, ${city}`;
-        }
-
-        console.log(`--- מבצע חיפוש עבור: ${searchQuery} ---`);
-
+        const searchQuery = `kosher restaurants in ${city}`;
         const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(searchQuery)}&key=${apiKey}&language=he`;
 
         const response = await axios.get(url);
-        
+
         if (response.data.status === "REQUEST_DENIED") {
-            console.error("Google API Error: REQUEST_DENIED. Check Billing.");
-            return res.status(403).json({ error: "API limit or Billing issue" });
+            console.error("Google API Error:", response.data.error_message);
+            return res.status(403).json({ error: "API Key or Billing issue" });
         }
 
         const results = response.data.results || [];
-        console.log(`נמצאו ${results.length} תוצאות`);
-
+        
+        // עיבוד ושמירה ב-Database
         const savedRestaurants = await Promise.all(results.map(async (place) => {
             const restaurantData = {
                 name: place.name,
@@ -39,11 +31,11 @@ router.post('/load-restaurants', async (req, res) => {
                 city: city,
                 rating: place.rating || 0,
                 photoReference: place.photos ? place.photos[0].photo_reference : null,
+                placeId: place.place_id,
                 location: {
                     type: 'Point',
                     coordinates: [place.geometry.location.lng, place.geometry.location.lat]
-                },
-                placeId: place.place_id
+                }
             };
 
             return await Restaurant.findOneAndUpdate(
@@ -59,6 +51,5 @@ router.post('/load-restaurants', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-
 
 module.exports = router;
