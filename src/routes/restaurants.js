@@ -7,7 +7,7 @@ router.post('/load-restaurants', async (req, res) => {
     try {
         const { city } = req.body;
         // וודא שהשם הזה תואם בדיוק למה שהגדרת ב-Render Settings
-        const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+        const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
         if (!city) return res.status(400).json({ error: "City is required" });
 
@@ -53,3 +53,4 @@ router.post('/load-restaurants', async (req, res) => {
 });
 
 module.exports = router;
+
