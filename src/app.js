@@ -9,11 +9,15 @@ const app = express();
 connectDB();
 
 // Middleware
-app.use(cors()); // זה מה שפותר את השגיאה שראית בתמונה!
-app.use(express.json());
+app.use(cors({
+  origin: '*', // מאפשר לכל דומיין (כולל Vercel) לגשת לשרת
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));app.use(express.json());
 
 // Routes
 app.use('/restaurants', require('./routes/restaurants'));
 
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => console.log(`Server running on ${PORT}`));
