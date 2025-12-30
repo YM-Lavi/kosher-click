@@ -6,7 +6,7 @@ const Restaurant = require('../models/Restaurant');
 router.post('/load-restaurants', async (req, res) => {
     try {
         const { city, street } = req.body;
-        const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+        const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
         if (!city) {
             return res.status(400).json({ error: "City is required" });
@@ -59,5 +59,6 @@ router.post('/load-restaurants', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
 
 module.exports = router;
