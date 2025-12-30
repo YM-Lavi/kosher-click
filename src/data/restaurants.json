@@ -1,0 +1,32 @@
+[
+  {
+    "name": "מסעדת הבשר של יוסי",
+    "city": "תל אביב",
+    "street": "דיזנגוף 100",
+    "kosherType": "רבנות",
+    "foodType": "בשרי",
+    "phone": "03-1234567",
+    "location": { "type": "Point", "coordinates": [34.782, 32.0853] },
+    "image": "https://via.placeholder.com/150"
+  },
+  {
+    "name": "פיצה כשרה ביפו",
+    "city": "תל אביב",
+    "street": "יפו 10",
+    "kosherType": "מהדרין",
+    "foodType": "חלבי",
+    "phone": "03-7654321",
+    "location": { "type": "Point", "coordinates": [34.772, 32.0500] },
+    "image": "https://via.placeholder.com/150"
+  },
+  {
+    "name": "שווארמה ירושלים",
+    "city": "ירושלים",
+    "street": "שח״ן 5",
+    "kosherType": "בד״ץ",
+    "foodType": "בשרי",
+    "phone": "02-9876543",
+    "location": { "type": "Point", "coordinates": [35.2137, 31.7683] },
+    "image": "https://via.placeholder.com/150"
+  }
+]
