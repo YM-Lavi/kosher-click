@@ -3,54 +3,70 @@ const router = express.Router();
 const axios = require('axios');
 const Restaurant = require('../models/Restaurant');
 
+// טעינת מסעדות לפי עיר
 router.post('/load-restaurants', async (req, res) => {
-    try {
-        const { city } = req.body;
-        // וודא שהשם הזה תואם בדיוק למה שהגדרת ב-Render Settings
-        const apiKey = process.env.VITE_GOOGLE_API_KEY;
+  try {
+    const { city } = req.body;
+    if (!city) return res.status(400).json({ error: 'City is required' });
 
-        if (!city) return res.status(400).json({ error: "City is required" });
+    const apiKey = process.env.VITE_GOOGLE_API_KEY;
+    const query = `kosher restaurants in ${city}`;
 
-        const searchQuery = `kosher restaurants in ${city}`;
-        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(searchQuery)}&key=${apiKey}&language=he`;
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}&language=he`;
 
-        const response = await axios.get(url);
+    const response = await axios.get(url);
+    const results = response.data.results || [];
 
-        if (response.data.status === "REQUEST_DENIED") {
-            console.error("Google API Error:", response.data.error_message);
-            return res.status(403).json({ error: "API Key or Billing issue" });
-        }
+    const savedRestaurants = await Promise.all(
+      results.map(async (place) => {
+        const data = {
+          name: place.name,
+          address: place.formatted_address,
+          city,
+          rating: place.rating || 0,
+          photoReference: place.photos?.[0]?.photo_reference || null,
+          placeId: place.place_id,
+          location: {
+            type: 'Point',
+            coordinates: [
+              place.geometry.location.lng,
+              place.geometry.location.lat
+            ]
+          }
+        };
 
-        const results = response.data.results || [];
-        
-        // עיבוד ושמירה ב-Database
-        const savedRestaurants = await Promise.all(results.map(async (place) => {
-            const restaurantData = {
-                name: place.name,
-                address: place.formatted_address,
-                city: city,
-                rating: place.rating || 0,
-                photoReference: place.photos ? place.photos[0].photo_reference : null,
-                placeId: place.place_id,
-                location: {
-                    type: 'Point',
-                    coordinates: [place.geometry.location.lng, place.geometry.location.lat]
-                }
-            };
+        return Restaurant.findOneAndUpdate(
+          { placeId: place.place_id },
+          data,
+          { upsert: true, new: true }
+        );
+      })
+    );
 
-            return await Restaurant.findOneAndUpdate(
-                { placeId: place.place_id },
-                restaurantData,
-                { upsert: true, new: true }
-            );
-        }));
+    res.json(savedRestaurants);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
-        res.json(savedRestaurants);
-    } catch (err) {
-        console.error("Server Error:", err.message);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
+
+// ⭐ Route לתמונה (Proxy)
+router.get('/photo/:ref', async (req, res) => {
+  try {
+    const apiKey = process.env.VITE_GOOGLE_API_KEY;
+
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${req.params.ref}&key=${apiKey}`;
+
+    const response = await axios.get(photoUrl, {
+      responseType: 'arraybuffer'
+    });
+
+    res.set('Content-Type', response.headers['content-type']);
+    res.send(response.data);
+  } catch (err) {
+    res.status(404).send('No image');
+  }
 });
 
 module.exports = router;
-
