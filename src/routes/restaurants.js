@@ -13,17 +13,29 @@ router.post('/load-restaurants', async (req, res) => {
     }
 
     // =========================
-    // חיפוש Places textSearch – ממש כמו בגוגל Maps
+    // חיפוש Places textSearch – מגביל לישראל
     // =========================
     const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json` +
       `?query=${encodeURIComponent(location)}+kosher+restaurant` +
+      `&region=il` +               // ✅ מגביל חיפוש לישראל
       `&language=he` +
       `&key=${apiKey}`;
 
     const placesRes = await axios.get(textSearchUrl);
-    const results = placesRes.data.results || [];
+    const { status, results, error_message } = placesRes.data;
 
     console.log('Places API response:', placesRes.data);
+
+    // =========================
+    // טיפול בשגיאות/ללא תוצאות
+    // =========================
+    if (status !== 'OK') {
+      return res.status(404).json({
+        error: 'לא נמצאו מסעדות למיקום זה',
+        googleStatus: status,
+        message: error_message || null
+      });
+    }
 
     if (!results.length) {
       return res.status(404).json({ error: 'לא נמצאו מסעדות למיקום זה' });
@@ -58,8 +70,22 @@ router.post('/load-restaurants', async (req, res) => {
     res.json(savedRestaurants);
 
   } catch (err) {
-    console.error('Server error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Server error', details: err.response?.data });
+    // =========================
+    // טיפול מפורט בשגיאות axios
+    // =========================
+    if (err.response) {
+      console.error('Error response from Google API:', err.response.data);
+      return res.status(500).json({
+        error: 'שגיאה בשרת',
+        details: err.response.data
+      });
+    } else if (err.request) {
+      console.error('No response received from Google API:', err.request);
+      return res.status(500).json({ error: 'אין תשובה מ-Google API' });
+    } else {
+      console.error('Unknown server error:', err.message);
+      return res.status(500).json({ error: 'שגיאה לא ידועה בשרת', details: err.message });
+    }
   }
 });
 
