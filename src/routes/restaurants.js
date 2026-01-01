@@ -11,7 +11,7 @@ router.post('/load-restaurants', async (req, res) => {
       return res.status(400).json({ error: 'Location is required', results: [] });
     }
 
-    const googleApiKey = process.env.GOOGLE_API_KEY;
+    const googleApiKey = process.env.VITE_GOOGLE_API_KEY;
 
     if (!googleApiKey) {
       console.error("❌ GOOGLE_API_KEY לא מוגדר בשרת!");
@@ -56,3 +56,4 @@ router.post('/load-restaurants', async (req, res) => {
 });
 
 module.exports = router;
+
