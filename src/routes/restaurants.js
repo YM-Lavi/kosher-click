@@ -4,68 +4,33 @@ const axios = require('axios');
 const Restaurant = require('../models/Restaurant');
 
 // =========================
-// 1️⃣ Load restaurants by city / area / neighborhood
+// 1️⃣ Load restaurants by any location (city, neighborhood, industrial zone)
 // =========================
 router.post('/load-restaurants', async (req, res) => {
   try {
-    const { city } = req.body;
+    const { location } = req.body; // שינוי שם מ-"city" ל-"location"
     const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    if (!city) {
-      return res.status(400).json({ error: 'City / area is required' });
+    if (!location) {
+      return res.status(400).json({ error: 'Location is required' });
     }
-
-    let geoRes;
-
-    // ======= ניסיון ראשון: עיר/יישוב בעברית + Israel =======
-    try {
-      geoRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)},Israel&language=he&key=${apiKey}`
-      );
-      console.log('Geo API response (hebrew):', geoRes.data);
-    } catch (err) {
-      console.error('Error calling Geocoding API (hebrew):', err.message);
-      geoRes = { data: { results: [] } };
-    }
-
-    // ======= ניסיון שני: באנגלית =======
-    if (!geoRes.data.results.length) {
-      geoRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&language=en&key=${apiKey}`
-      );
-      console.log('Geo API response (english):', geoRes.data);
-    }
-
-    // ======= חפש תוצאה מכל סוג אפשרי =======
-    const geoResult = geoRes.data.results.find(r =>
-      r.types.includes('locality') ||       // עיר
-      r.types.includes('sublocality') ||    // יישוב קטן / שכונה
-      r.types.includes('neighborhood') ||   // שכונה
-      r.types.includes('premise') ||        // בניין / אזור
-      r.types.includes('establishment')     // כל מקום אחר
-    );
-
-    if (!geoResult) {
-      return res.status(404).json({ error: 'Location not found' });
-    }
-
-    const { lat, lng } = geoResult.geometry.location;
 
     // =========================
-    // 2️⃣ Nearby Search – מסעדות כשרות
+    // 2️⃣ Places API textSearch
     // =========================
-    const placesUrl =
-      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-      `?location=${lat},${lng}` +
-      `&radius=15000` +
-      `&type=restaurant` +
-      `&keyword=kosher` +
+    const textSearchUrl = 
+      `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+      `?query=${encodeURIComponent(location)}+kosher+restaurant` +
       `&language=he` +
       `&key=${apiKey}`;
 
-    const placesRes = await axios.get(placesUrl);
+    const placesRes = await axios.get(textSearchUrl);
     const results = placesRes.data.results || [];
     console.log('Places API results count:', results.length);
+
+    if (!results.length) {
+      return res.status(404).json({ error: 'No restaurants found for this location' });
+    }
 
     // =========================
     // 3️⃣ שמירה / עדכון ב־DB
@@ -74,17 +39,14 @@ router.post('/load-restaurants', async (req, res) => {
       results.map(async (place) => {
         const data = {
           name: place.name,
-          address: place.vicinity,
-          city,
+          address: place.formatted_address || place.vicinity,
+          locationName: location, // שם שהמשתמש הזין
           rating: place.rating || 0,
           photoReference: place.photos?.[0]?.photo_reference || null,
           placeId: place.place_id,
-          location: {
-            type: 'Point',
-            coordinates: [
-              place.geometry.location.lng,
-              place.geometry.location.lat
-            ]
+          coordinates: {
+            lat: place.geometry.location.lat,
+            lng: place.geometry.location.lng
           }
         };
 
@@ -99,7 +61,7 @@ router.post('/load-restaurants', async (req, res) => {
     res.json(savedRestaurants);
 
   } catch (err) {
-    console.error('Server error:', err.message);
+    console.error('Server error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
