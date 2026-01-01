@@ -68,7 +68,7 @@ router.get('/photo/:ref', async (req, res) => {
   try {
     const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${req.params.ref}&key=${apiKey}`;
+    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${req.params.ref}&key=${apiKey}`;
 
     const response = await axios.get(photoUrl, {
       responseType: 'arraybuffer'
@@ -82,3 +82,4 @@ router.get('/photo/:ref', async (req, res) => {
 });
 
 module.exports = router;
+
