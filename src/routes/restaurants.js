@@ -2,42 +2,43 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
+// וודא שהמודל שלך נכון, אם אתה צריך להשתמש במונגו
+// const Restaurant = require('../../models/Restaurant'); 
+
 router.post('/load-restaurants', async (req, res) => {
   try {
     const { location } = req.body;
-    if (!location) return res.status(400).json({ error: "Location is required" });
 
-    const apiKey = process.env.GOOGLE_API_KEY;
-
-    // חיפוש טקסטואלי ב-Google Places
-    const response = await axios.get('https://maps.googleapis.com/maps/api/place/textsearch/json', {
-      params: {
-        query: `מסעדות כשרות ${location}`,
-        key: apiKey,
-        region: 'il'  // מבטיח תוצאות בישראל בלבד
-      }
-    });
-
-    if (!response.data.results || response.data.results.length === 0) {
-      return res.json({ results: [], message: "לא נמצאו מסעדות באזור הזה" });
+    if (!location || location.trim() === '') {
+      return res.status(400).json({ error: 'Location is required', results: [] });
     }
 
-    // מיפוי תוצאות למסודר
-    const results = response.data.results.map(r => ({
+    // קריאה ל-Google Places API
+    const googleApiKey = process.env.GOOGLE_API_KEY;
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=kosher+restaurants+in+${encodeURIComponent(location)}&key=${googleApiKey}`;
+
+    const response = await axios.get(url);
+
+    // ודא שתמיד מחזירים מערך
+    const results = Array.isArray(response.data.results) ? response.data.results : [];
+
+    // אפשר לעשות מיפוי ולשלוח רק מה שצריך
+    const mappedResults = results.map(r => ({
       name: r.name,
       address: r.formatted_address,
       rating: r.rating || 0,
+      user_ratings_total: r.user_ratings_total || 0,
       placeId: r.place_id,
-      userRatingsTotal: r.user_ratings_total || 0,
-      location: r.geometry?.location || { lat: null, lng: null },
-      photoReference: r.photos?.[0]?.photo_reference || null
+      price_level: r.price_level || null,
+      types: r.types || [],
+      icon: r.icon || null,
     }));
 
-    res.json({ results });
+    res.json({ results: mappedResults });
 
-  } catch (err) {
-    console.error('Error fetching restaurants:', err.message);
-    res.status(500).json({ error: 'Server error' });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Internal server error', results: [] });
   }
 });
 
