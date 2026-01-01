@@ -4,7 +4,7 @@ const axios = require('axios');
 const Restaurant = require('../models/Restaurant');
 
 // =========================
-// 1️⃣ Load restaurants by city
+// 1️⃣ Load restaurants by city / area / neighborhood
 // =========================
 router.post('/load-restaurants', async (req, res) => {
   try {
@@ -12,15 +12,15 @@ router.post('/load-restaurants', async (req, res) => {
     const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
     if (!city) {
-      return res.status(400).json({ error: 'City is required' });
+      return res.status(400).json({ error: 'City / area is required' });
     }
 
     let geoRes;
 
-    // ======= ניסיון ראשון: עיר בעברית עם region=il =======
+    // ======= ניסיון ראשון: עיר/יישוב בעברית + Israel =======
     try {
       geoRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&region=il&language=he&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)},Israel&language=he&key=${apiKey}`
       );
       console.log('Geo API response (hebrew):', geoRes.data);
     } catch (err) {
@@ -28,7 +28,7 @@ router.post('/load-restaurants', async (req, res) => {
       geoRes = { data: { results: [] } };
     }
 
-    // ======= ניסיון שני: עיר באנגלית =======
+    // ======= ניסיון שני: באנגלית =======
     if (!geoRes.data.results.length) {
       geoRes = await axios.get(
         `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&language=en&key=${apiKey}`
@@ -36,12 +36,20 @@ router.post('/load-restaurants', async (req, res) => {
       console.log('Geo API response (english):', geoRes.data);
     }
 
-    // ======= אם עדיין לא נמצאה =======
-    if (!geoRes.data.results.length) {
-      return res.status(404).json({ error: 'City not found' });
+    // ======= חפש תוצאה מכל סוג אפשרי =======
+    const geoResult = geoRes.data.results.find(r =>
+      r.types.includes('locality') ||       // עיר
+      r.types.includes('sublocality') ||    // יישוב קטן / שכונה
+      r.types.includes('neighborhood') ||   // שכונה
+      r.types.includes('premise') ||        // בניין / אזור
+      r.types.includes('establishment')     // כל מקום אחר
+    );
+
+    if (!geoResult) {
+      return res.status(404).json({ error: 'Location not found' });
     }
 
-    const { lat, lng } = geoRes.data.results[0].geometry.location;
+    const { lat, lng } = geoResult.geometry.location;
 
     // =========================
     // 2️⃣ Nearby Search – מסעדות כשרות
