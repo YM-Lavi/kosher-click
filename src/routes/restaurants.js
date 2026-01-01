@@ -3,6 +3,9 @@ const router = express.Router();
 const axios = require('axios');
 const Restaurant = require('../models/Restaurant');
 
+// =========================
+// 1️⃣ Load restaurants by city
+// =========================
 router.post('/load-restaurants', async (req, res) => {
   try {
     const { city } = req.body;
@@ -12,21 +15,28 @@ router.post('/load-restaurants', async (req, res) => {
       return res.status(400).json({ error: 'City is required' });
     }
 
-    // =========================
-    // 1️⃣ Geocoding – עיר → קואורדינטות
-    // ניסיון 1: עברית + ישראל
-    // =========================
-    let geoRes = await axios.get(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&region=il&language=he&key=${apiKey}`
-    );
+    let geoRes;
 
-    // ניסיון 2: fallback – בלי region
-    if (!geoRes.data.results.length) {
+    // ======= ניסיון ראשון: עיר בעברית עם region=il =======
+    try {
       geoRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&region=il&language=he&key=${apiKey}`
       );
+      console.log('Geo API response (hebrew):', geoRes.data);
+    } catch (err) {
+      console.error('Error calling Geocoding API (hebrew):', err.message);
+      geoRes = { data: { results: [] } };
     }
 
+    // ======= ניסיון שני: עיר באנגלית =======
+    if (!geoRes.data.results.length) {
+      geoRes = await axios.get(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&language=en&key=${apiKey}`
+      );
+      console.log('Geo API response (english):', geoRes.data);
+    }
+
+    // ======= אם עדיין לא נמצאה =======
     if (!geoRes.data.results.length) {
       return res.status(404).json({ error: 'City not found' });
     }
@@ -34,7 +44,7 @@ router.post('/load-restaurants', async (req, res) => {
     const { lat, lng } = geoRes.data.results[0].geometry.location;
 
     // =========================
-    // 2️⃣ Nearby Search – מסעדות כשרות ליד העיר
+    // 2️⃣ Nearby Search – מסעדות כשרות
     // =========================
     const placesUrl =
       `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
@@ -47,6 +57,7 @@ router.post('/load-restaurants', async (req, res) => {
 
     const placesRes = await axios.get(placesUrl);
     const results = placesRes.data.results || [];
+    console.log('Places API results count:', results.length);
 
     // =========================
     // 3️⃣ שמירה / עדכון ב־DB
@@ -85,9 +96,8 @@ router.post('/load-restaurants', async (req, res) => {
   }
 });
 
-
 // =========================
-// ⭐ Proxy לתמונות (לא נוגעים בזה)
+// ⭐ Proxy לתמונות
 // =========================
 router.get('/photo/:ref', async (req, res) => {
   try {
