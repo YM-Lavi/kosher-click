@@ -9,9 +9,9 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Routes – עם prefix /restaurants
 const restaurantRoutes = require('./routes/restaurants');
-app.use('/', restaurantRoutes);
+app.use('/restaurants', restaurantRoutes);
 
 // Start server
 app.listen(PORT, () => {
