@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
-// ====== ROUTE: טוען מסעדות כשרות לפי עיר ======
+// ====== טוען מסעדות כשרות לפי עיר ======
 router.post('/load-restaurants', async (req, res) => {
   try {
     const { location } = req.body;
@@ -12,7 +12,6 @@ router.post('/load-restaurants', async (req, res) => {
     }
 
     const googleApiKey = process.env.VITE_GOOGLE_API_KEY;
-
     if (!googleApiKey) {
       console.error("❌ GOOGLE_API_KEY לא מוגדר בשרת!");
       return res.status(500).json({ error: 'Google API key missing', results: [] });
@@ -45,8 +44,7 @@ router.post('/load-restaurants', async (req, res) => {
         photo_reference: photo.photo_reference,
         width: photo.width,
         height: photo.height,
-        // יצירת URL חדש ל־backend
-        url: `/photo?photoRef=${photo.photo_reference}&maxwidth=400`
+        url: `/restaurants/photo?photoRef=${photo.photo_reference}&maxwidth=400`
       })),
       icon: r.icon || null,
     }));
@@ -59,7 +57,7 @@ router.post('/load-restaurants', async (req, res) => {
   }
 });
 
-// ====== ROUTE: הורדת תמונה מ-Google דרך backend ======
+// ====== הורדת תמונה מ-Google דרך backend ======
 router.get('/photo', async (req, res) => {
   try {
     const { photoRef, maxwidth = 400 } = req.query;
