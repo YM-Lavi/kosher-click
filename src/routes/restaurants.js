@@ -1,82 +1,122 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const Restaurant = require('../models/Restaurant');
 
-// ====== טוען מסעדות כשרות לפי עיר ======
+// =========================
+// 1️⃣ Load restaurants by location
+// =========================
 router.post('/load-restaurants', async (req, res) => {
   try {
     const { location } = req.body;
+    const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    if (!location || location.trim() === '') {
-      return res.status(400).json({ error: 'Location is required', results: [] });
+    if (!location) {
+      return res.status(400).json({ error: 'location is required' });
     }
 
-    const googleApiKey = process.env.VITE_GOOGLE_API_KEY;
-    if (!googleApiKey) {
-      console.error("❌ GOOGLE_API_KEY לא מוגדר בשרת!");
-      return res.status(500).json({ error: 'Google API key missing', results: [] });
+    let geoRes;
+
+    // ======= ניסיון ראשון: עיר בעברית עם region=il =======
+    try {
+      geoRes = await axios.get(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&region=il&language=he&key=${apiKey}`
+      );
+      console.log('Geo API response (hebrew):', geoRes.data);
+    } catch (err) {
+      console.error('Error calling Geocoding API (hebrew):', err.message);
+      geoRes = { data: { results: [] } };
     }
 
-    const query = `מסעדות כשרות ${location}`;
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${googleApiKey}`;
-
-    const response = await axios.get(url);
-
-    console.log("📌 Google Response Status:", response.data.status);
-
-    if (response.data.status !== "OK") {
-      console.error("❌ Google Error:", response.data);
-      return res.json({ results: [] });
+    // ======= ניסיון שני: עיר באנגלית =======
+    if (!geoRes.data.results.length) {
+      geoRes = await axios.get(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&language=en&key=${apiKey}`
+      );
+      console.log('Geo API response (english):', geoRes.data);
     }
 
-    const results = response.data.results || [];
+    // ======= אם עדיין לא נמצאה =======
+    if (!geoRes.data.results.length) {
+      return res.status(404).json({ error: 'location not found' });
+    }
 
-    // מיפוי מסודר + יצירת URL לתמונה דרך backend
-    const mappedResults = results.map(r => ({
-      name: r.name,
-      address: r.formatted_address,
-      rating: r.rating || 0,
-      user_ratings_total: r.user_ratings_total || 0,
-      place_id: r.place_id,
-      price_level: r.price_level || null,
-      types: r.types || [],
-      photos: (r.photos || []).map(photo => ({
-        photo_reference: photo.photo_reference,
-        width: photo.width,
-        height: photo.height,
-        url: `/restaurants/photo?photoRef=${photo.photo_reference}&maxwidth=400`
-      })),
-      icon: r.icon || null,
-    }));
+    const { lat, lng } = geoRes.data.results[0].geometry.location;
 
-    res.json({ results: mappedResults });
+    // =========================
+    // 2️⃣ Nearby Search – מסעדות כשרות
+    // =========================
+    const placesUrl =
+      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+      `?location=${lat},${lng}` +
+      `&radius=15000` +
+      `&type=restaurant` +
+      `&keyword=kosher` +
+      `&language=he` +
+      `&key=${apiKey}`;
 
-  } catch (error) {
-    console.error("🔥 SERVER ERROR:", error.message);
-    res.status(500).json({ error: 'Internal server error', results: [] });
+    const placesRes = await axios.get(placesUrl);
+    const results = placesRes.data.results || [];
+    console.log('Places API results count:', results.length);
+
+    // =========================
+    // 3️⃣ שמירה / עדכון ב־DB
+    // =========================
+    const savedRestaurants = await Promise.all(
+      results.map(async (place) => {
+        const data = {
+          name: place.name,
+          address: place.vicinity,
+          location,
+          rating: place.rating || 0,
+          photoReference: place.photos?.[0]?.photo_reference || null,
+          placeId: place.place_id,
+          location: {
+            type: 'Point',
+            coordinates: [
+              place.geometry.location.lng,
+              place.geometry.location.lat
+            ]
+          }
+        };
+
+        return Restaurant.findOneAndUpdate(
+          { placeId: place.place_id },
+          data,
+          { upsert: true, new: true }
+        );
+      })
+    );
+
+    res.json(savedRestaurants);
+
+  } catch (err) {
+    console.error('Server error:', err.message);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ====== הורדת תמונה מ-Google דרך backend ======
-router.get('/photo', async (req, res) => {
+// =========================
+// ⭐ Proxy לתמונות
+// =========================
+router.get('/photo/:ref', async (req, res) => {
   try {
-    const { photoRef, maxwidth = 400 } = req.query;
+    const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    if (!photoRef) {
-      return res.status(400).send('photoRef is required');
-    }
+    const photoUrl =
+      `https://maps.googleapis.com/maps/api/place/photo` +
+      `?maxwidth=400` +
+      `&photo_reference=${req.params.ref}` +
+      `&key=${apiKey}`;
 
-    const googleApiKey = process.env.VITE_GOOGLE_API_KEY;
-    const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxwidth}&photoreference=${photoRef}&key=${googleApiKey}`;
+    const response = await axios.get(photoUrl, {
+      responseType: 'arraybuffer'
+    });
 
-    const response = await axios.get(url, { responseType: 'arraybuffer' });
-
-    res.set('Content-Type', 'image/jpeg');
-    res.send(Buffer.from(response.data, 'binary'));
-
-  } catch (error) {
-    console.error('🔥 Photo Error:', error.message);
-    res.status(500).send('Error fetching photo');
+    res.set('Content-Type', response.headers['content-type']);
+    res.send(response.data);
+  } catch {
+    res.status(404).send('No image');
   }
 });
 
