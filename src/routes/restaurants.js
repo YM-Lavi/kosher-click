@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
-// טוען מסעדות כשרות לפי עיר
+// ====== ROUTE: טוען מסעדות כשרות לפי עיר ======
 router.post('/load-restaurants', async (req, res) => {
   try {
     const { location } = req.body;
@@ -18,9 +18,7 @@ router.post('/load-restaurants', async (req, res) => {
       return res.status(500).json({ error: 'Google API key missing', results: [] });
     }
 
-    // שאילתא טובה וברורה ל-Google
     const query = `מסעדות כשרות ${location}`;
-
     const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${googleApiKey}`;
 
     const response = await axios.get(url);
@@ -34,7 +32,7 @@ router.post('/load-restaurants', async (req, res) => {
 
     const results = response.data.results || [];
 
-    // מיפוי מסודר
+    // מיפוי מסודר + יצירת URL לתמונה דרך backend
     const mappedResults = results.map(r => ({
       name: r.name,
       address: r.formatted_address,
@@ -43,7 +41,13 @@ router.post('/load-restaurants', async (req, res) => {
       place_id: r.place_id,
       price_level: r.price_level || null,
       types: r.types || [],
-      photos: r.photos || [], // חשוב!
+      photos: (r.photos || []).map(photo => ({
+        photo_reference: photo.photo_reference,
+        width: photo.width,
+        height: photo.height,
+        // יצירת URL חדש ל־backend
+        url: `/photo?photoRef=${photo.photo_reference}&maxwidth=400`
+      })),
       icon: r.icon || null,
     }));
 
@@ -55,5 +59,27 @@ router.post('/load-restaurants', async (req, res) => {
   }
 });
 
-module.exports = router;
+// ====== ROUTE: הורדת תמונה מ-Google דרך backend ======
+router.get('/photo', async (req, res) => {
+  try {
+    const { photoRef, maxwidth = 400 } = req.query;
 
+    if (!photoRef) {
+      return res.status(400).send('photoRef is required');
+    }
+
+    const googleApiKey = process.env.VITE_GOOGLE_API_KEY;
+    const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxwidth}&photoreference=${photoRef}&key=${googleApiKey}`;
+
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
+
+    res.set('Content-Type', 'image/jpeg');
+    res.send(Buffer.from(response.data, 'binary'));
+
+  } catch (error) {
+    console.error('🔥 Photo Error:', error.message);
+    res.status(500).send('Error fetching photo');
+  }
+});
+
+module.exports = router;
