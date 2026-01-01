@@ -1,67 +1,60 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const Restaurant = require('../models/Restaurant'); // ודא שהמודל נכון
+const Restaurant = require('../../models/Restaurant'); // המודל שלך
+
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
-// Helper: קבלת מסעדות מגוגל
-async function fetchRestaurantsFromGoogle(query) {
-  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json`;
-  const res = await axios.get(url, {
-    params: {
-      query: `${query} kosher`,
-      key: GOOGLE_API_KEY,
-      region: 'IL', // מגביל למסעדות בישראל
-    },
-  });
-
-  if (res.data.status !== 'OK') return [];
-
-  return res.data.results.map(r => {
-    if (!r.geometry?.location?.lat || !r.geometry?.location?.lng) return null;
-    return {
-      placeId: r.place_id,
-      name: r.name,
-      address: r.formatted_address,
-      location: {
-        type: 'Point',
-        coordinates: [r.geometry.location.lng, r.geometry.location.lat],
-      },
-      rating: r.rating || 0,
-      userRatingsTotal: r.user_ratings_total || 0,
-      photoReference: r.photos?.[0]?.photo_reference || null,
-    };
-  }).filter(Boolean); // מסיר null
-}
-
-// Route: טעינת מסעדות
 router.post('/load-restaurants', async (req, res) => {
+  const { city } = req.body;
+
+  if (!city || city.trim() === '') {
+    return res.status(400).json({ error: 'Location is required' });
+  }
+
   try {
-    const { city } = req.body;
-    if (!city) return res.status(400).json({ error: 'Location is required' });
-
-    // תחילה ננסה לחפש במונגו
-    let restaurants = await Restaurant.find({
-      $text: { $search: city },
-      'location.coordinates.0': { $exists: true },
-      'location.coordinates.1': { $exists: true },
-    });
-
-    // אם אין תוצאות במונגו, נשלוף מגוגל
-    if (!restaurants.length) {
-      restaurants = await fetchRestaurantsFromGoogle(city);
-
-      // שמירת התוצאות במונגו למעקב עתידי
-      for (const r of restaurants) {
-        const exists = await Restaurant.findOne({ placeId: r.placeId });
-        if (!exists) await Restaurant.create(r);
+    // חיפוש Google Places Text Search (כולל אזורי תעשייה, יישובים קטנים)
+    const response = await axios.get(
+      `https://maps.googleapis.com/maps/api/place/textsearch/json`,
+      {
+        params: {
+          query: `מסעדות כשרות ב${city}`,
+          key: GOOGLE_API_KEY,
+          language: 'he',
+        },
       }
+    );
+
+    if (response.data.status !== 'OK') {
+      return res.status(500).json({ error: 'שגיאה ב-Google Places', details: response.data });
     }
 
-    res.json(restaurants);
+    const results = response.data.results;
+
+    // פילטר – נשמור רק מסעדות עם קואורדינטות בישראל
+    const restaurants = results
+      .filter(r => r.geometry?.location && r.formatted_address?.includes('ישראל'))
+      .map(r => ({
+        placeId: r.place_id,
+        name: r.name,
+        address: r.formatted_address,
+        rating: r.rating || 0,
+        userRatingsTotal: r.user_ratings_total || 0,
+        photoReference: r.photos?.[0]?.photo_reference || null,
+        location: {
+          type: 'Point',
+          coordinates: [r.geometry.location.lng, r.geometry.location.lat]
+        }
+      }));
+
+    // עדכון למסד (אם רוצים) – ניתן להוסיף check אם כבר קיים
+    // await Restaurant.insertMany(restaurants);
+
+    return res.json(restaurants);
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'שגיאה לא ידועה בשרת', details: err.message });
+    return res.status(500).json({ error: 'שגיאה לא ידועה בשרת', details: err.message });
   }
 });
 
