@@ -17,7 +17,7 @@ router.post('/load-restaurants', async (req, res) => {
     // =========================
     const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json` +
       `?query=${encodeURIComponent(location)}+kosher+restaurant` +
-      `&region=il` +               // ✅ מגביל חיפוש לישראל
+      `&region=il` +               
       `&language=he` +
       `&key=${apiKey}`;
 
@@ -27,7 +27,7 @@ router.post('/load-restaurants', async (req, res) => {
     console.log('Places API response:', placesRes.data);
 
     // =========================
-    // טיפול בשגיאות/ללא תוצאות
+    // טיפול בשגיאות / ללא תוצאות
     // =========================
     if (status !== 'OK') {
       return res.status(404).json({
@@ -46,16 +46,22 @@ router.post('/load-restaurants', async (req, res) => {
     // =========================
     const savedRestaurants = await Promise.all(
       results.map(async (place) => {
+        const coords = place.geometry?.location
+          ? [place.geometry.location.lng, place.geometry.location.lat]
+          : null;
+
+        if (!coords) return null; // דילוג על מסעדות בלי מיקום
+
         const data = {
           name: place.name,
           address: place.formatted_address || place.vicinity,
-          locationName: location, // מה שהמשתמש הזין
+          locationName: location, 
           rating: place.rating || 0,
           photoReference: place.photos?.[0]?.photo_reference || null,
           placeId: place.place_id,
-          coordinates: {
-            lat: place.geometry.location.lat,
-            lng: place.geometry.location.lng
+          location: {
+            type: 'Point',
+            coordinates: coords
           }
         };
 
@@ -67,7 +73,8 @@ router.post('/load-restaurants', async (req, res) => {
       })
     );
 
-    res.json(savedRestaurants);
+    // סינון מסעדות שלא נשמרו בגלל חוסר coordinates
+    res.json(savedRestaurants.filter(r => r !== null));
 
   } catch (err) {
     // =========================
