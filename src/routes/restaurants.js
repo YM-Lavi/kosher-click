@@ -3,44 +3,41 @@ const router = express.Router();
 const axios = require('axios');
 const Restaurant = require('../models/Restaurant');
 
-// =========================
-// 1️⃣ Load restaurants by any location (city, neighborhood, industrial zone)
-// =========================
 router.post('/load-restaurants', async (req, res) => {
   try {
-    const { location } = req.body; // שינוי שם מ-"city" ל-"location"
+    const { location } = req.body; // מה שהמשתמש הזין
     const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    if (!location) {
-      return res.status(400).json({ error: 'Location is required' });
+    if (!location || !location.trim()) {
+      return res.status(400).json({ error: 'אנא הזן מיקום' });
     }
 
     // =========================
-    // 2️⃣ Places API textSearch
+    // חיפוש Places textSearch – ממש כמו בגוגל Maps
     // =========================
-    const textSearchUrl = 
-      `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+    const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json` +
       `?query=${encodeURIComponent(location)}+kosher+restaurant` +
       `&language=he` +
       `&key=${apiKey}`;
 
     const placesRes = await axios.get(textSearchUrl);
     const results = placesRes.data.results || [];
-    console.log('Places API results count:', results.length);
+
+    console.log('Places API response:', placesRes.data);
 
     if (!results.length) {
-      return res.status(404).json({ error: 'No restaurants found for this location' });
+      return res.status(404).json({ error: 'לא נמצאו מסעדות למיקום זה' });
     }
 
     // =========================
-    // 3️⃣ שמירה / עדכון ב־DB
+    // שמירה / עדכון ב-DB
     // =========================
     const savedRestaurants = await Promise.all(
       results.map(async (place) => {
         const data = {
           name: place.name,
           address: place.formatted_address || place.vicinity,
-          locationName: location, // שם שהמשתמש הזין
+          locationName: location, // מה שהמשתמש הזין
           rating: place.rating || 0,
           photoReference: place.photos?.[0]?.photo_reference || null,
           placeId: place.place_id,
@@ -62,7 +59,7 @@ router.post('/load-restaurants', async (req, res) => {
 
   } catch (err) {
     console.error('Server error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: err.response?.data });
   }
 });
 
