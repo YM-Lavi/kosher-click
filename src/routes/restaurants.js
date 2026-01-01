@@ -12,9 +12,20 @@ router.post('/load-restaurants', async (req, res) => {
       return res.status(400).json({ error: 'City is required' });
     }
 
-    // 1️⃣ Geocoding – עיר → קואורדינטות (מוגבל לישראל)
-    const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&region=il&key=${apiKey}`;
-    const geoRes = await axios.get(geoUrl);
+    // =========================
+    // 1️⃣ Geocoding – עיר → קואורדינטות
+    // ניסיון 1: עברית + ישראל
+    // =========================
+    let geoRes = await axios.get(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&region=il&language=he&key=${apiKey}`
+    );
+
+    // ניסיון 2: fallback – בלי region
+    if (!geoRes.data.results.length) {
+      geoRes = await axios.get(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&key=${apiKey}`
+      );
+    }
 
     if (!geoRes.data.results.length) {
       return res.status(404).json({ error: 'City not found' });
@@ -22,13 +33,24 @@ router.post('/load-restaurants', async (req, res) => {
 
     const { lat, lng } = geoRes.data.results[0].geometry.location;
 
+    // =========================
     // 2️⃣ Nearby Search – מסעדות כשרות ליד העיר
-    const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=15000&type=restaurant&keyword=kosher&language=he&key=${apiKey}`;
-    const placesRes = await axios.get(placesUrl);
+    // =========================
+    const placesUrl =
+      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+      `?location=${lat},${lng}` +
+      `&radius=15000` +
+      `&type=restaurant` +
+      `&keyword=kosher` +
+      `&language=he` +
+      `&key=${apiKey}`;
 
+    const placesRes = await axios.get(placesUrl);
     const results = placesRes.data.results || [];
 
+    // =========================
     // 3️⃣ שמירה / עדכון ב־DB
+    // =========================
     const savedRestaurants = await Promise.all(
       results.map(async (place) => {
         const data = {
@@ -56,6 +78,7 @@ router.post('/load-restaurants', async (req, res) => {
     );
 
     res.json(savedRestaurants);
+
   } catch (err) {
     console.error('Server error:', err.message);
     res.status(500).json({ error: 'Server error' });
@@ -63,12 +86,18 @@ router.post('/load-restaurants', async (req, res) => {
 });
 
 
-// ⭐ Route לתמונות (לא נוגעים)
+// =========================
+// ⭐ Proxy לתמונות (לא נוגעים בזה)
+// =========================
 router.get('/photo/:ref', async (req, res) => {
   try {
     const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${req.params.ref}&key=${apiKey}`;
+    const photoUrl =
+      `https://maps.googleapis.com/maps/api/place/photo` +
+      `?maxwidth=400` +
+      `&photo_reference=${req.params.ref}` +
+      `&key=${apiKey}`;
 
     const response = await axios.get(photoUrl, {
       responseType: 'arraybuffer'
@@ -82,4 +111,3 @@ router.get('/photo/:ref', async (req, res) => {
 });
 
 module.exports = router;
-
