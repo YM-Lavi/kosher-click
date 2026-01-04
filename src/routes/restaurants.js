@@ -4,15 +4,15 @@ const axios = require('axios');
 const Restaurant = require('../models/Restaurant');
 
 // =========================
-// 1️⃣ Load restaurants by location
+// 1️⃣ Load restaurants by city
 // =========================
 router.post('/load-restaurants', async (req, res) => {
   try {
-    const { location } = req.body;
+    const { city } = req.body;
     const apiKey = process.env.VITE_GOOGLE_API_KEY;
 
-    if (!location) {
-      return res.status(400).json({ error: 'location is required' });
+    if (!city) {
+      return res.status(400).json({ error: 'City is required' });
     }
 
     let geoRes;
@@ -20,7 +20,7 @@ router.post('/load-restaurants', async (req, res) => {
     // ======= ניסיון ראשון: עיר בעברית עם region=il =======
     try {
       geoRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&region=il&language=he&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&region=il&language=he&key=${apiKey}`
       );
       console.log('Geo API response (hebrew):', geoRes.data);
     } catch (err) {
@@ -31,14 +31,14 @@ router.post('/load-restaurants', async (req, res) => {
     // ======= ניסיון שני: עיר באנגלית =======
     if (!geoRes.data.results.length) {
       geoRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&language=en&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&language=en&key=${apiKey}`
       );
       console.log('Geo API response (english):', geoRes.data);
     }
 
     // ======= אם עדיין לא נמצאה =======
     if (!geoRes.data.results.length) {
-      return res.status(404).json({ error: 'location not found' });
+      return res.status(404).json({ error: 'City not found' });
     }
 
     const { lat, lng } = geoRes.data.results[0].geometry.location;
@@ -67,7 +67,7 @@ router.post('/load-restaurants', async (req, res) => {
         const data = {
           name: place.name,
           address: place.vicinity,
-          location,
+          city,
           rating: place.rating || 0,
           photoReference: place.photos?.[0]?.photo_reference || null,
           placeId: place.place_id,
