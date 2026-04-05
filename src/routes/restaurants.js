@@ -9,7 +9,7 @@ const Restaurant = require('../models/Restaurant');
 router.post('/load-restaurants', async (req, res) => {
   try {
     const { city } = req.body;
-    const apiKey = process.env.VITE_GOOGLE_API_KEY;
+    const apiKey = process.env.GOOGLE_API_KEY; // ✅ תוקן: הוסר הקידומת VITE_
 
     if (!city) {
       return res.status(400).json({ error: 'City is required' });
@@ -101,7 +101,7 @@ router.post('/load-restaurants', async (req, res) => {
 // =========================
 router.get('/photo/:ref', async (req, res) => {
   try {
-    const apiKey = process.env.VITE_GOOGLE_API_KEY;
+    const apiKey = process.env.GOOGLE_API_KEY; // ✅ תוקן: הוסר הקידומת VITE_
 
     const photoUrl =
       `https://maps.googleapis.com/maps/api/place/photo` +
